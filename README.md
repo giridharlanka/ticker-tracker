@@ -71,6 +71,8 @@ ticker-tracker --show-config --web --show-config-host 127.0.0.1 --show-config-po
 
 The web view needs `pip install 'ticker-tracker[web]'` (Flask).
 
+**What the `[web]` extra does *not* include:** there is **no** browser page for live **portfolio holdings / P/L** (that comes from the Google Sheet, the generated Excel file, and the email attachment). Web is only for **setup** (`ticker-tracker-setup --web`) and **read-only config** (`ticker-tracker --show-config --web`).
+
 ---
 
 ## Google Sheets format

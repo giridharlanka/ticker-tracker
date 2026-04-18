@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -65,7 +66,18 @@ def main(argv: list[str] | None = None) -> None:
     if args.run:
         from ticker_tracker.engine import run_once
 
-        run_once()
+        def _headless_progress(pct: int, msg: str) -> None:
+            """ASCII progress bar on stderr for non-GUI runs."""
+            if not sys.stderr.isatty():
+                print(f"[{pct}%] {msg}", file=sys.stderr, flush=True)
+                return
+            width = 24
+            filled = min(width, max(0, round(width * pct / 100.0)))
+            bar = "#" * filled + "-" * (width - filled)
+            end = "\n" if pct >= 100 else ""
+            print(f"\r[{pct:3d}%] [{bar}] {msg}", end=end, file=sys.stderr, flush=True)
+
+        run_once(progress_callback=_headless_progress)
         return
 
     from ticker_tracker.ui.popup import show_popup

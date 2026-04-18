@@ -39,6 +39,20 @@ def _pct_fill(value: Any) -> PatternFill | None:
     return None
 
 
+def _mixed_purchase_currencies(holdings_rows: list[dict[str, Any]]) -> bool:
+    """True if rows use more than one *report_ccy* (totals of purchase-currency amounts would mix units)."""
+    seen: set[str] = set()
+    for h in holdings_rows:
+        raw = h.get("report_ccy")
+        if raw is None:
+            continue
+        s = str(raw).strip().upper()
+        if not s or s == "—":
+            continue
+        seen.add(s)
+    return len(seen) > 1
+
+
 def build_portfolio_workbook(
     path: str | Path,
     *,
@@ -100,13 +114,14 @@ def build_portfolio_workbook(
         if pf:
             ws_h.cell(r, pct_col).fill = pf
 
-    total_row = last_data + 1
-    ws_h.cell(total_row, 1, "TOTAL").font = _HEADER_FONT
-    if last_data >= 2:
-        ws_h.cell(total_row, 2, f"=SUM(B2:B{last_data})").font = _HEADER_FONT
-        ws_h.cell(total_row, 5, f"=SUM(E2:E{last_data})").font = _HEADER_FONT
-        ws_h.cell(total_row, 7, f"=SUM(G2:G{last_data})").font = _HEADER_FONT
-        ws_h.cell(total_row, 8, f"=SUM(H2:H{last_data})").font = _HEADER_FONT
+    if not _mixed_purchase_currencies(holdings_rows):
+        total_row = last_data + 1
+        ws_h.cell(total_row, 1, "TOTAL").font = _HEADER_FONT
+        if last_data >= 2:
+            ws_h.cell(total_row, 2, f"=SUM(B2:B{last_data})").font = _HEADER_FONT
+            ws_h.cell(total_row, 5, f"=SUM(E2:E{last_data})").font = _HEADER_FONT
+            ws_h.cell(total_row, 7, f"=SUM(G2:G{last_data})").font = _HEADER_FONT
+            ws_h.cell(total_row, 8, f"=SUM(H2:H{last_data})").font = _HEADER_FONT
 
     for col in range(1, len(h1) + 1):
         ws_h.column_dimensions[get_column_letter(col)].width = 16

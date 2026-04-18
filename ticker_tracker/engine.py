@@ -478,6 +478,7 @@ def run_once(
     send_email_notifications: bool = True,
     workbook_path: Path | None = None,
     status_callback: Callable[[str], None] | None = None,
+    progress_callback: Callable[[int, str], None] | None = None,
 ) -> dict[str, Any]:
     """
     End-to-end portfolio run for multi-currency holdings.
@@ -485,6 +486,9 @@ def run_once(
     Provide *app_config* for tests; otherwise load via *encrypted_config* or default path.
 
     *status_callback* receives short progress strings for UI (e.g. Tk popup).
+
+    *progress_callback*, when set, receives ``(percent_0_to_100, message)`` at coarse milestones
+    (e.g. CLI progress bar). *status_callback* is still invoked with the same *message* text.
     """
     cfg = app_config if app_config is not None else (encrypted_config or EncryptedConfig()).load()
     if not cfg.google_sheets_id or not cfg.column_map:
@@ -494,15 +498,23 @@ def run_once(
         if status_callback:
             status_callback(msg)
 
+    def _progress(pct: int, msg: str) -> None:
+        if progress_callback is not None:
+            progress_callback(pct, msg)
+        _status(msg)
+
     creds = credentials
     use_drive = cfg.upload_to_drive if upload_to_drive is None else upload_to_drive
 
+    _progress(5, "Starting portfolio run…")
+    _progress(10, "Reading holdings from Google Sheets…")
     rows_raw = read_holdings(
         cfg.google_sheets_id,
         cfg.holdings_sheet_name,
         cfg.column_map,
         credentials=creds,
     )
+    _progress(18, f"Loaded {len(rows_raw)} sheet row(s).")
 
     def _sheet_ticker(r: dict[str, Any]) -> str:
         return str(r.get("ticker") or "").strip()
@@ -526,7 +538,7 @@ def run_once(
     if not adapters:
         raise ValueError("No supported finance_sources in config (e.g. yahoo).")
 
-    _status("Fetching prices...")
+    _progress(28, "Fetching market prices…")
     price_failed: list[str] = []
     prices: dict[str, PriceResult] = {}
     try:
@@ -534,6 +546,7 @@ def run_once(
     except FinanceAdapterError as exc:
         logger.error("Price fetch failed for all adapters: %s", exc)
         price_failed = list(dict.fromkeys(sheet_tickers))
+    _progress(48, "Prices updated; applying FX…")
 
     base = normalize_iso4217(cfg.base_currency)
     natives: set[str] = {base}
@@ -670,6 +683,7 @@ def run_once(
             }
         )
 
+    _progress(62, "Computing portfolio summary…")
     summary = portfolio_summary(enriched)
     run_ts = datetime.now(UTC).isoformat()
 
@@ -705,7 +719,7 @@ def run_once(
     else:
         fname = default_workbook_filename()
         out_path = Path(tempfile.gettempdir()) / fname
-    _status("Building report...")
+    _progress(72, "Building Excel report…")
     build_portfolio_workbook(
         out_path,
         base_currency=base,
@@ -713,10 +727,13 @@ def run_once(
         summary=summary,
         metadata=metadata,
     )
+    _progress(80, "Report file ready.")
 
     drive_url: str | None = None
     if use_drive:
+        _progress(84, "Uploading to Google Drive…")
         drive_url = upload_file(out_path, fname, folder_id=None, credentials=creds)
+        _progress(90, "Drive upload complete.")
 
     emails_sent = 0
     if send_email_notifications and cfg.email_ids:
@@ -739,14 +756,15 @@ def run_once(
             seen_recips.add(key)
             recipients.append(addr)
 
+        _progress(92, "Sending notification email(s)…")
         for addr in recipients:
             send_email(addr, subject, body, attachment_path=out_path, credentials=creds)
             emails_sent += 1
 
     if drive_url:
-        _status("Done! File saved to Drive.")
+        _progress(100, "Done! File saved to Drive.")
     else:
-        _status("Done! Report saved locally.")
+        _progress(100, "Done! Report saved locally.")
 
     return {
         "config": cfg,

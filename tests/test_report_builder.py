@@ -136,3 +136,59 @@ def test_summary_purchased_splits_multiple_currencies(tmp_path: Path) -> None:
     assert ws.cell(5, 1).value in (None, "")
     assert "HKD" in str(ws.cell(4, 3).value)
     assert "USD" in str(ws.cell(5, 3).value)
+
+
+def test_holdings_sheet_omits_total_row_when_mixed_purchase_currencies(tmp_path: Path) -> None:
+    """TOTAL sums purchase-currency columns; omit when CCY column mixes units."""
+    row = {
+        "ticker": "A",
+        "shares": 1.0,
+        "report_ccy": "USD",
+        "cost_per_share_purchase": 1.0,
+        "cost_basis_purchase": 1.0,
+        "price_per_share_purchase": 1.0,
+        "current_value_purchase": 1.0,
+        "gain_loss_purchase": 0.0,
+        "gain_loss_pct_purchase": 0.0,
+        "cost_basis_base": 1.0,
+        "native_ccy": "USD",
+        "price_native": 1.0,
+        "fx_rate_display": 1.0,
+        "current_price_base": 1.0,
+        "current_value_base": 1.0,
+        "gain_loss_base": 0.0,
+        "gain_loss_pct": 0.0,
+    }
+    row_b = {**row, "ticker": "B", "report_ccy": "SGD"}
+    holdings = [row, row_b]
+    summary = {
+        "total_cost_basis_base": 2.0,
+        "total_current_value_base": 2.0,
+        "total_gain_loss_base": 0.0,
+        "total_return_pct": 0.0,
+        "distinct_ticker_count": 2,
+        "totals_purchase_cost_by_ccy": {"USD": 1.0, "SGD": 1.0},
+        "totals_purchase_value_by_ccy": {"USD": 1.0, "SGD": 1.0},
+        "totals_purchase_gl_by_ccy": {"USD": 0.0, "SGD": 0.0},
+        "assumption_notes": [],
+    }
+    out = tmp_path / "mixed_ccy_holdings.xlsx"
+    build_portfolio_workbook(
+        out,
+        base_currency="USD",
+        holdings_rows=holdings,
+        summary=summary,
+        metadata={
+            "fx_rates": [],
+            "finance_source_by_ticker": {},
+            "price_fetch_failed": [],
+            "fx_unavailable_tickers": [],
+        },
+    )
+    ws = load_workbook(out)["Holdings"]
+    assert ws.cell(2, 1).value == "A"
+    assert ws.cell(3, 1).value == "B"
+    assert ws.cell(4, 1).value is None
+    for col in range(1, 10):
+        assert ws.cell(4, col).value is None
+    assert all(ws.cell(3, c).value != "TOTAL" for c in range(1, 10))

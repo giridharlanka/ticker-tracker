@@ -127,7 +127,7 @@ def show_popup() -> None:
     def run_worker() -> None:
         root.after(0, partial(progress.start, 12))
         root.after(0, partial(run_btn.configure, state=tk.DISABLED))
-        root.after(0, partial(set_status, "Fetching prices...", error=False))
+        root.after(0, partial(set_status, "Starting…", error=False))
         try:
             result = engine_run(
                 app_config=cfg,

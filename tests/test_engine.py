@@ -536,3 +536,48 @@ def test_run_once_rejects_unsupported_fx(
             send_email_notifications=False,
             workbook_path=tmp_path / "z.xlsx",
         )
+
+
+@patch("ticker_tracker.engine.get_prices_with_fallback")
+@patch("ticker_tracker.engine.read_holdings")
+@patch("ticker_tracker.fx.frankfurter.urllib.request.urlopen")
+def test_run_once_progress_callback_reaches_one_hundred(
+    mock_urlopen: MagicMock,
+    mock_read: MagicMock,
+    mock_prices: MagicMock,
+    tmp_path: Path,
+) -> None:
+    import json
+
+    mock_read.return_value = [{"ticker": "VOO", "shares": "1", "cost_basis": "500"}]
+    mock_prices.return_value = {"VOO": PriceResult(400.0, "USD", 400.0, "yahoo")}
+
+    class _Resp:
+        def read(self) -> bytes:
+            return json.dumps(
+                {"amount": 1.0, "base": "SGD", "date": "2026-01-10", "rates": {"USD": 1.0}}
+            ).encode()
+
+        def __enter__(self) -> _Resp:
+            return self
+
+        def __exit__(self, *a: object) -> bool:
+            return False
+
+    mock_urlopen.return_value = _Resp()
+    seen: list[tuple[int, str]] = []
+
+    def progress_cb(pct: int, msg: str) -> None:
+        seen.append((pct, msg))
+
+    run_once(
+        app_config=_minimal_config(tmp_path),
+        send_email_notifications=False,
+        workbook_path=tmp_path / "prog.xlsx",
+        progress_callback=progress_cb,
+    )
+    pcts = [p for p, _ in seen]
+    assert pcts[0] < pcts[-1]
+    assert pcts[-1] == 100
+    assert any("Reading holdings" in m for _, m in seen)
+    assert any("Done!" in m for _, m in seen)
