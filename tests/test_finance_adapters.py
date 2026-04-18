@@ -381,9 +381,7 @@ def test_finnhub_keeps_quote_when_profile_http_fails(mock_urlopen: MagicMock) ->
         assert isinstance(req, urllib.request.Request)
         if "/quote" in req.full_url:
             return _Resp({"c": 2.0, "pc": 1.0})
-        err = urllib.error.HTTPError(
-            req.full_url, 500, "Internal Error", {}, BytesIO(b"{}")
-        )
+        err = urllib.error.HTTPError(req.full_url, 500, "Internal Error", {}, BytesIO(b"{}"))
         raise err
 
     mock_urlopen.side_effect = _side_effect

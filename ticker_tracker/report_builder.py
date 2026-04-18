@@ -40,7 +40,7 @@ def _pct_fill(value: Any) -> PatternFill | None:
 
 
 def _mixed_purchase_currencies(holdings_rows: list[dict[str, Any]]) -> bool:
-    """True if rows use more than one *report_ccy* (totals of purchase-currency amounts would mix units)."""
+    """True if rows use more than one *report_ccy* (purchase-currency totals would mix units)."""
     seen: set[str] = set()
     for h in holdings_rows:
         raw = h.get("report_ccy")

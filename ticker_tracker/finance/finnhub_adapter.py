@@ -147,7 +147,9 @@ class FinnhubAdapter(FinanceAdapter):
         keys_order = ("c", "pc", "o", "h", "l")
         for key in keys_order:
             candidate = data.get(key)
-            if candidate is None:
+            if candidate is None or isinstance(candidate, bool):
+                continue
+            if not isinstance(candidate, str | int | float):
                 continue
             try:
                 v = float(candidate)

@@ -177,9 +177,9 @@ def _email_fmt_gl_pct_html(value: Any) -> str:
     s = f"{x:,.2f}%"
     esc = html.escape(s)
     if x > 0:
-        return f"<span style=\"color:#1a7f37;font-weight:600\">{esc}</span>"
+        return f'<span style="color:#1a7f37;font-weight:600">{esc}</span>'
     if x < 0:
-        return f"<span style=\"color:#c5221f;font-weight:600\">{esc}</span>"
+        return f'<span style="color:#c5221f;font-weight:600">{esc}</span>'
     return esc
 
 
@@ -213,9 +213,7 @@ def _merge_holdings_rows_for_ticker(rows: list[dict[str, Any]]) -> dict[str, Any
     gl_b = gain_loss_base(sum_cv_base, sum_cb_base)
     gl_pct_base = gain_loss_pct(sum_cv_base, sum_cb_base)
 
-    excluded = any(
-        bool(r.get("price_fetch_failed")) or bool(r.get("fx_unavailable")) for r in rows
-    )
+    excluded = any(bool(r.get("price_fetch_failed")) or bool(r.get("fx_unavailable")) for r in rows)
 
     report_ccys = {
         str(r.get("report_ccy") or "").strip().upper()
@@ -410,8 +408,8 @@ def build_portfolio_email_html(
     b = base.upper()
     eb = html.escape(b)
     parts: list[str] = [
-        "<html><body style=\"font-family:system-ui,-apple-system,sans-serif;line-height:1.45\">",
-        f"<h2 style=\"margin-bottom:0.25rem\">Portfolio summary ({eb})</h2>",
+        '<html><body style="font-family:system-ui,-apple-system,sans-serif;line-height:1.45">',
+        f'<h2 style="margin-bottom:0.25rem">Portfolio summary ({eb})</h2>',
     ]
 
     summary_headers = ["Metric", "Base", "Purchased"]
@@ -460,9 +458,9 @@ def build_portfolio_email_html(
 
     if drive_url:
         safe = html.escape(drive_url, quote=True)
-        parts.append(f"<p><a href=\"{safe}\">Open report in Google Drive</a></p>")
+        parts.append(f'<p><a href="{safe}">Open report in Google Drive</a></p>')
     parts.append(
-        "<p style=\"color:#555;font-size:0.9rem\">"
+        '<p style="color:#555;font-size:0.9rem">'
         "Detailed numbers are also in the attached workbook.</p>"
     )
     parts.append("</body></html>")
