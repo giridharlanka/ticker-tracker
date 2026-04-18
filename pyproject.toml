@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ticker-tracker"
+version = "0.1.0"
+description = "Local ticker and holdings tracker with encrypted configuration."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "cryptography>=42.0.0,<43",
+  "keyring>=25.0.0,<26",
+  "google-api-python-client>=2.100.0,<3",
+  "google-auth-oauthlib>=1.2.0,<2",
+  "google-auth-httplib2>=0.2.0,<1",
+  "yfinance>=0.2.40,<0.3",
+  "forex-python>=1.8,<2",
+  "openpyxl>=3.1.0,<4",
+]
+
+[project.optional-dependencies]
+web = ["flask>=3.0.0,<4"]
+dev = [
+  "pytest>=8.0.0,<9",
+  "pytest-cov>=4.1.0,<6",
+  "flask>=3.0.0,<4",
+  "ruff>=0.8.0,<0.10",
+  "mypy>=1.11.0,<2",
+]
+
+[project.scripts]
+ticker-tracker = "ticker_tracker.main:main"
+ticker-tracker-setup = "ticker_tracker.setup_wizard:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ticker_tracker*"]
+
+[tool.setuptools.package-data]
+ticker_tracker = ["web/templates/*.html", "py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["ticker_tracker", "tests", "main.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "W"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["ticker_tracker"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+show_error_codes = true

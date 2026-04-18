@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Secrets and local config
+credentials.json
+*.token
+config.enc
+.env
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# Other files
+exploration_prompt*
+Portfolio_Tracker_Implementation_Plan*

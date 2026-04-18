@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ticker Tracker — current configuration</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; line-height: 1.45; color: #1a1a1a; }
+    body { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.35rem; }
+    .muted { font-size: 0.88rem; color: #555; }
+    pre {
+      background: #f6f8fa;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-size: 0.88rem;
+    }
+    code { background: #eee; padding: 0.1rem 0.35rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Current configuration (read-only)</h1>
+  <p class="muted">File: <code>{{ config_path }}</code></p>
+  <p class="muted">API keys live in the OS keychain, not in this file. Below is the JSON from <code>config.enc</code>.</p>
+  <pre>{{ payload | safe }}</pre>
+</body>
+</html>

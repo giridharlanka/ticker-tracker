@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ticker Tracker — setup</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; line-height: 1.45; color: #1a1a1a; }
+    body { max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.35rem; }
+    h2 { font-size: 1.05rem; margin-top: 1.75rem; border-bottom: 1px solid #ddd; padding-bottom: 0.25rem; }
+    .help { font-size: 0.88rem; color: #444; background: #f6f8fa; padding: 0.75rem 1rem; border-radius: 6px; margin: 0.5rem 0 1rem; white-space: pre-wrap; }
+    label { display: block; font-weight: 600; margin-top: 0.75rem; }
+    input[type="text"], textarea, select { width: 100%; max-width: 100%; box-sizing: border-box; padding: 0.45rem 0.5rem; margin-top: 0.25rem; }
+    textarea { min-height: 5rem; font-family: ui-monospace, monospace; font-size: 0.9rem; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; margin: 0.35rem 0; }
+    .row label { font-weight: 500; margin: 0; }
+    .err { background: #fff5f5; color: #822; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; }
+    .ok { background: #f0fff4; color: #225; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; }
+    button { margin-top: 1.5rem; padding: 0.55rem 1.25rem; font-size: 1rem; cursor: pointer; }
+    .muted { font-size: 0.85rem; color: #666; }
+    code { background: #eee; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.88em; }
+  </style>
+</head>
+<body>
+  <h1>Ticker Tracker — configuration</h1>
+  <p class="muted">This page runs only on your computer. Close the tab and stop the terminal process when you are done.</p>
+
+  {% if errors %}
+  <div class="err">
+    <strong>Please fix the following:</strong>
+    <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if saved %}
+  <div class="ok"><strong>Saved.</strong> Encrypted config and keychain entries were updated. You can close this window.</div>
+  {% endif %}
+
+  <form method="post" action="/">
+    <h2>{{ titles.google_sheets_id }}</h2>
+    <div class="help">{{ helps.google_sheets_id }}</div>
+    <label for="google_sheets_id">Sheet ID</label>
+    <input type="text" id="google_sheets_id" name="google_sheets_id" value="{{ form.google_sheets_id }}" autocomplete="off" required>
+
+    <h2>{{ titles.holdings_sheet_name }}</h2>
+    <div class="help">{{ helps.holdings_sheet_name }}</div>
+    <label for="holdings_sheet_name">Tab name</label>
+    <input type="text" id="holdings_sheet_name" name="holdings_sheet_name" value="{{ form.holdings_sheet_name }}" required>
+
+    <h2>{{ titles.column_mapping }}</h2>
+    <div class="help">{{ helps.column_mapping }}</div>
+    {% for field, desc in recommended_columns %}
+    <label for="col_{{ field }}">Column for <code>{{ field }}</code> — {{ desc }}</label>
+    <input type="text" id="col_{{ field }}" name="col_{{ field }}" value="{{ form['col_' ~ field] }}" maxlength="3" pattern="[A-Za-z]*" placeholder="{{ default_cols[field] }}">
+    {% endfor %}
+
+    <h2>{{ titles.emails }}</h2>
+    <div class="help">{{ helps.emails }}</div>
+    <label for="emails">One email per line</label>
+    <textarea id="emails" name="emails" required>{{ form.emails }}</textarea>
+
+    <h2>{{ titles.finance_sources }}</h2>
+    <div class="help">{{ helps.finance_sources }}</div>
+    {% for sid, slabel in finance_labels %}
+    <div class="row">
+      <input type="checkbox" name="finance_{{ sid }}" id="fin_{{ sid }}" value="1" {% if sid in form.finance_selected %}checked{% endif %}>
+      <label for="fin_{{ sid }}">{{ slabel }}</label>
+    </div>
+    {% if sid != 'yahoo' %}
+    <label for="key_{{ sid }}">API key for {{ sid }} (keychain)</label>
+    <input type="password" name="key_{{ sid }}" id="key_{{ sid }}" value="{{ form['key_' ~ sid] }}" autocomplete="new-password">
+    {% endif %}
+    {% endfor %}
+
+    <h2>{{ titles.base_currency }}</h2>
+    <div class="help">{{ helps.base_currency }}</div>
+    <label for="base_currency">ISO code (e.g. SGD)</label>
+    <input type="text" id="base_currency" name="base_currency" value="{{ form.base_currency }}" maxlength="8" required>
+
+    <h2>{{ titles.fx_source }}</h2>
+    <div class="help">{{ helps.fx_source }}</div>
+    {% for fx_id, fx_label in fx_choices %}
+    <div class="row">
+      <input type="radio" name="fx_source" id="fx_{{ fx_id }}" value="{{ fx_id }}" {% if form.fx_source == fx_id %}checked{% endif %} required>
+      <label for="fx_{{ fx_id }}">{{ fx_label }}</label>
+    </div>
+    {% endfor %}
+    <label for="fx_api_key">FX API key (only if you chose a paid source above)</label>
+    <input type="password" name="fx_api_key" id="fx_api_key" value="{{ form.fx_api_key }}" autocomplete="new-password">
+
+    <h2>{{ titles.market_overrides }}</h2>
+    <div class="help">{{ helps.market_overrides }}</div>
+    <label for="market_overrides">Optional — one per line: <code>.KL=MYR</code></label>
+    <textarea id="market_overrides" name="market_overrides">{{ form.market_overrides }}</textarea>
+
+    <h2>{{ titles.upload_to_drive }}</h2>
+    <div class="help">{{ helps.upload_to_drive }}</div>
+    <div class="row">
+      <input type="checkbox" name="upload_to_drive" id="upload_to_drive" value="1" {% if form.upload_to_drive %}checked{% endif %}>
+      <label for="upload_to_drive">Upload the generated Excel file to Google Drive</label>
+    </div>
+
+    <h2>{{ titles.run_on_startup }}</h2>
+    <div class="help">{{ helps.run_on_startup }}</div>
+    <div class="row">
+      <input type="checkbox" name="run_on_startup" id="run_on_startup" value="1" {% if form.run_on_startup %}checked{% endif %}>
+      <label for="run_on_startup">Launch with the operating system (when supported)</label>
+    </div>
+
+    <button type="submit">Save configuration</button>
+  </form>
+</body>
+</html>

@@ -1,0 +1,268 @@
+"""Interactive setup: terminal (CLI) or local web UI."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Callable
+from pathlib import Path
+
+from ticker_tracker.config import AppConfig, EncryptedConfig, default_config_path
+from ticker_tracker.currency import normalize_iso4217
+from ticker_tracker.setup_core import (
+    DEFAULT_COLUMN_LETTERS,
+    FREE_FX_SOURCES,
+    FX_SOURCES,
+    KNOWN_FINANCE_SOURCES,
+    OPTIONAL_COLUMN_FIELDS,
+    RECOMMENDED_COLUMNS,
+    apply_setup,
+)
+from ticker_tracker.setup_help import print_section
+
+
+def _prompt(label: str, default: str | None = None) -> str:
+    hint = f" [{default}]" if default is not None else ""
+    raw = input(f"{label}{hint}: ").strip()
+    if not raw and default is not None:
+        return default
+    return raw
+
+
+def _prompt_yes_no(label: str, default: bool = False) -> bool:
+    default_hint = "Y/n" if default else "y/N"
+    raw = input(f"{label} ({default_hint}): ").strip().lower()
+    if not raw:
+        return default
+    return raw in ("y", "yes", "1", "true", "t")
+
+
+def _collect_column_map() -> dict[str, str]:
+    print_section("column_mapping")
+    if _prompt_yes_no(
+        "Use recommended fields (ticker, exchange, shares, cost_basis, "
+        "purchase_currency, optional currency_override)?",
+        True,
+    ):
+        mapping: dict[str, str] = {}
+        for field, desc in RECOMMENDED_COLUMNS:
+            hint_default = (
+                None
+                if field in OPTIONAL_COLUMN_FIELDS
+                else (DEFAULT_COLUMN_LETTERS.get(field) or None)
+            )
+            col = _prompt(f"  Column for '{field}' ({desc})", hint_default).strip().upper()
+            if field in OPTIONAL_COLUMN_FIELDS and not col:
+                continue
+            if col:
+                mapping[field] = col
+        return mapping
+
+    print("Enter an empty field name when done.")
+    manual_map: dict[str, str] = {}
+    while True:
+        field_name = input("  Field name (e.g. ticker, shares): ").strip()
+        if not field_name:
+            break
+        col = input(f"  Column letter for '{field_name}': ").strip().upper()
+        if not col or not col.isalpha():
+            print("  Invalid column; use letters only (e.g. A or AB).")
+            continue
+        manual_map[field_name] = col
+    return manual_map
+
+
+def _collect_emails() -> list[str]:
+    print_section("emails")
+    emails: list[str] = []
+    while True:
+        line = input("  Email (empty line when done): ").strip()
+        if not line:
+            break
+        emails.append(line)
+    return emails
+
+
+def _collect_finance() -> tuple[list[str], dict[str, str]]:
+    print_section("finance_sources")
+    print(f"Known sources: {', '.join(KNOWN_FINANCE_SOURCES)}")
+    raw = input("Enter sources, comma-separated: ").strip().lower()
+    names = [p.strip() for p in raw.split(",") if p.strip()]
+    unknown = [n for n in names if n not in KNOWN_FINANCE_SOURCES]
+    if unknown:
+        print(f"  Unknown source(s) ignored: {', '.join(unknown)}")
+        names = [n for n in names if n in KNOWN_FINANCE_SOURCES]
+
+    keys: dict[str, str] = {}
+    for name in names:
+        if name == "yahoo":
+            continue
+        keys[name] = input(f"  API key for '{name}' (stored in OS keychain): ").strip()
+    return names, keys
+
+
+def _collect_base_currency() -> str:
+    print_section("base_currency")
+    return _prompt("Base currency (ISO 4217)", "SGD")
+
+
+def _collect_fx_source() -> tuple[str, str | None]:
+    print_section("fx_source")
+    print("Options: frankfurter (free), open_exchange_rates, fixer, currencylayer")
+    choice = _prompt("FX source", "frankfurter").strip().lower()
+    if choice not in FX_SOURCES:
+        return choice, None
+    if choice in FREE_FX_SOURCES:
+        return choice, None
+    key = input("  FX API key (stored in OS keychain): ").strip()
+    return choice, (key or None)
+
+
+def _collect_market_overrides() -> dict[str, str]:
+    print_section("market_overrides")
+    if not _prompt_yes_no("Add any custom suffix → currency mappings?", False):
+        return {}
+    out: dict[str, str] = {}
+    while True:
+        suf = input("  Ticker suffix (e.g. .KL, empty to finish): ").strip()
+        if not suf:
+            break
+        if not suf.startswith("."):
+            print("    Suffix should start with '.' (e.g. .KL).")
+            continue
+        cur = normalize_iso4217(input(f"  Currency for suffix '{suf}' (ISO code): ").strip())
+        out[suf] = cur
+    return out
+
+
+def run_wizard(save_path: Callable[[], EncryptedConfig] | None = None) -> AppConfig:
+    print("Ticker Tracker — setup wizard (terminal)\n")
+
+    print_section("google_sheets_id")
+    sheet_id = _prompt("Google Sheets ID")
+
+    print_section("holdings_sheet_name")
+    sheet_name = _prompt("Holdings sheet (tab) name", "Holdings")
+
+    column_map = _collect_column_map()
+    emails = _collect_emails()
+    sources, finance_keys = _collect_finance()
+
+    base_raw = _collect_base_currency()
+    base_currency = normalize_iso4217(base_raw)
+
+    fx_source, fx_key = _collect_fx_source()
+
+    overrides = _collect_market_overrides()
+
+    print_section("upload_to_drive")
+    upload_drive = _prompt_yes_no(
+        "Upload Excel report to Google Drive (still emailed if enabled below)?",
+        default=False,
+    )
+
+    print_section("run_on_startup")
+    run_startup = _prompt_yes_no("Run on OS startup", default=False)
+
+    enc = save_path() if save_path else EncryptedConfig()
+    cfg, issues = apply_setup(
+        google_sheets_id=sheet_id.strip(),
+        holdings_sheet_name=sheet_name.strip() or "Holdings",
+        column_map=column_map,
+        email_ids=emails,
+        finance_sources=sources,
+        finance_api_keys=finance_keys,
+        base_currency=base_currency,
+        fx_source=fx_source,
+        fx_api_key=fx_key,
+        market_currency_overrides=overrides,
+        run_on_startup=run_startup,
+        upload_to_drive=upload_drive,
+        encrypted_config=enc,
+    )
+    if issues:
+        print("\nVerification found problems (nothing was saved):")
+        for msg in issues:
+            print(f"  - {msg}")
+        print("\nFix the items above and run the setup wizard again.")
+        sys.exit(1)
+
+    assert cfg is not None
+    print(f"\nSaved encrypted config to {enc.path.resolve()}")
+    print("Finance and FX API keys were stored in the OS keychain where applicable.")
+    print("\nAll checks passed for the information you provided.")
+
+    try:
+        from ticker_tracker.ui.startup_registration import deregister_startup, register_startup
+
+        if cfg.run_on_startup:
+            register_startup()
+            print("Registered this app to run at OS login (headless: main.py --run).")
+        else:
+            deregister_startup()
+            print("Removed OS login startup entry for this app (if one was present).")
+    except Exception as exc:  # noqa: BLE001
+        print(f"\nWarning: could not update OS startup registration: {exc}")
+
+    return cfg
+
+
+def _run_web(host: str, port: int, config_path: Path | None) -> None:
+    try:
+        from ticker_tracker.web.setup_server import run_setup_server
+    except ImportError as e:
+        print(
+            "The web interface needs Flask. Install with:\n  pip install 'ticker-tracker[web]'\n",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from e
+    run_setup_server(host=host, port=port, config_path=config_path)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Configure Ticker Tracker (encrypted config + OS keychain)."
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--web",
+        action="store_true",
+        help="Open a browser-based setup form (requires: pip install 'ticker-tracker[web]').",
+    )
+    mode.add_argument(
+        "--cli",
+        action="store_true",
+        help="Use the terminal questionnaire (default if no flag is passed).",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="With --web: bind address (default 127.0.0.1 for local-only).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="With --web: TCP port (default 8765).",
+    )
+    args = parser.parse_args()
+
+    path = default_config_path()
+    print(f"Config will be stored at: {path.resolve()}\n")
+
+    use_web = args.web
+    if not args.web and not args.cli:
+        print("How would you like to run setup?")
+        print("  [1] Terminal — step-by-step questions in this window")
+        print("  [2] Web browser — a form at http://127.0.0.1 (easier if you avoid the CLI)")
+        choice = input("Enter 1 or 2 [1]: ").strip() or "1"
+        use_web = choice == "2"
+
+    if use_web:
+        _run_web(args.host, args.port, None)
+    else:
+        run_wizard(lambda: EncryptedConfig(path))
+
+
+if __name__ == "__main__":
+    main()
