@@ -106,14 +106,15 @@ def _collect_finance() -> tuple[list[str], dict[str, str]]:
         if name == "yahoo":
             continue
         existing = bool(get_finance_api_key(name))
-        print(
-            f"  API key status for '{name}': "
-            f"{'exists (hidden)' if existing else 'not set'}"
+        print(f"  API key status for '{name}': {'exists (hidden)' if existing else 'not set'}")
+        action = (
+            _prompt(
+                "  Key action: [k]eep existing, [r]eplace with new key, [c]lear existing",
+                "k",
+            )
+            .strip()
+            .lower()
         )
-        action = _prompt(
-            "  Key action: [k]eep existing, [r]eplace with new key, [c]lear existing",
-            "k",
-        ).strip().lower()
         if action == "c":
             keys[name] = ""
         elif action == "r":
@@ -136,10 +137,14 @@ def _collect_fx_source() -> tuple[str, str | None]:
         return choice, None
     existing = bool(get_fx_api_key())
     print(f"  FX key status: {'exists (hidden)' if existing else 'not set'}")
-    action = _prompt(
-        "  Key action: [k]eep existing, [r]eplace with new key, [c]lear existing",
-        "k",
-    ).strip().lower()
+    action = (
+        _prompt(
+            "  Key action: [k]eep existing, [r]eplace with new key, [c]lear existing",
+            "k",
+        )
+        .strip()
+        .lower()
+    )
     if action == "c":
         return choice, ""
     if action == "r":

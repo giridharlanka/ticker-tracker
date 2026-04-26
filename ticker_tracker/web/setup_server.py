@@ -81,8 +81,8 @@ def _form_from_request(form: Any) -> dict[str, Any]:
         out["holdings_source"] = "google_sheets"
     out["local_holdings_path"] = (form.get("local_holdings_path") or "").strip()
     out["local_holdings_sheet_name"] = (
-        (form.get("local_holdings_sheet_name") or "").strip() or "Holdings"
-    )
+        form.get("local_holdings_sheet_name") or ""
+    ).strip() or "Holdings"
     out["emails"] = form.get("emails") or ""
     out["base_currency"] = (form.get("base_currency") or "").strip()
     out["fx_source"] = (form.get("fx_source") or "frankfurter").strip().lower()
@@ -90,9 +90,9 @@ def _form_from_request(form: Any) -> dict[str, Any]:
     out["market_overrides"] = form.get("market_overrides") or ""
     out["run_on_startup"] = form.get("run_on_startup") == "1"
     out["upload_to_drive"] = form.get("upload_to_drive") == "1"
-    out["output_formats"] = [
-        fmt for fmt in OUTPUT_FORMATS if form.get(f"output_{fmt}") == "1"
-    ] or ["xlsx"]
+    out["output_formats"] = [fmt for fmt in OUTPUT_FORMATS if form.get(f"output_{fmt}") == "1"] or [
+        "xlsx"
+    ]
     out["local_report_dir"] = (form.get("local_report_dir") or "").strip()
     selected: list[str] = []
     for sid in KNOWN_FINANCE_SOURCES:

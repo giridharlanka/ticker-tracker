@@ -24,6 +24,7 @@ KEYRING_SERVICE = "ticker-tracker"
 KEYRING_CONFIG_KEY_USER = "config-key"
 KEYRING_FX_API_USER = "fx-api-key"
 HKDF_INFO = b"ticker-tracker-fernet-v1"
+LOCAL_SALT_FILE = "config.salt"
 
 
 def finance_keyring_username(source: str) -> str:
@@ -32,31 +33,37 @@ def finance_keyring_username(source: str) -> str:
 
 
 def get_fx_api_key() -> str | None:
-    return keyring.get_password(KEYRING_SERVICE, KEYRING_FX_API_USER)
+    try:
+        return keyring.get_password(KEYRING_SERVICE, KEYRING_FX_API_USER)
+    except keyring.errors.KeyringError:
+        return None
 
 
 def set_fx_api_key(key: str | None) -> None:
-    if key:
-        keyring.set_password(KEYRING_SERVICE, KEYRING_FX_API_USER, key)
-        return
     try:
+        if key:
+            keyring.set_password(KEYRING_SERVICE, KEYRING_FX_API_USER, key)
+            return
         keyring.delete_password(KEYRING_SERVICE, KEYRING_FX_API_USER)
-    except keyring.errors.PasswordDeleteError:
+    except keyring.errors.KeyringError:
         pass
 
 
 def get_finance_api_key(source: str) -> str | None:
-    return keyring.get_password(KEYRING_SERVICE, finance_keyring_username(source))
+    try:
+        return keyring.get_password(KEYRING_SERVICE, finance_keyring_username(source))
+    except keyring.errors.KeyringError:
+        return None
 
 
 def set_finance_api_key(source: str, key: str | None) -> None:
     user = finance_keyring_username(source)
-    if key:
-        keyring.set_password(KEYRING_SERVICE, user, key)
-        return
     try:
+        if key:
+            keyring.set_password(KEYRING_SERVICE, user, key)
+            return
         keyring.delete_password(KEYRING_SERVICE, user)
-    except keyring.errors.PasswordDeleteError:
+    except keyring.errors.KeyringError:
         pass
 
 
@@ -91,16 +98,33 @@ def application_config_dir() -> Path:
 
 def _get_or_create_keyring_salt() -> bytes:
     """32-byte salt stored in the OS keychain; combined with machine fingerprint for Fernet key."""
-    existing = keyring.get_password(KEYRING_SERVICE, KEYRING_CONFIG_KEY_USER)
-    if existing:
-        return base64.urlsafe_b64decode(existing.encode("ascii"))
-    salt = os.urandom(32)
-    keyring.set_password(
-        KEYRING_SERVICE,
-        KEYRING_CONFIG_KEY_USER,
-        base64.urlsafe_b64encode(salt).decode("ascii"),
-    )
-    return salt
+    try:
+        existing = keyring.get_password(KEYRING_SERVICE, KEYRING_CONFIG_KEY_USER)
+        if existing:
+            return base64.urlsafe_b64decode(existing.encode("ascii"))
+        salt = os.urandom(32)
+        keyring.set_password(
+            KEYRING_SERVICE,
+            KEYRING_CONFIG_KEY_USER,
+            base64.urlsafe_b64encode(salt).decode("ascii"),
+        )
+        return salt
+    except keyring.errors.KeyringError:
+        # CI/headless environments may not have an OS keychain backend.
+        # Fall back to a local random salt file in the app config directory.
+        path = application_config_dir() / LOCAL_SALT_FILE
+        if path.is_file():
+            raw = path.read_bytes()
+            if len(raw) == 32:
+                return raw
+        salt = os.urandom(32)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(salt)
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+        return salt
 
 
 def _fernet_from_keychain() -> Fernet:
