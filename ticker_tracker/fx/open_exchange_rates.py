@@ -20,16 +20,19 @@ OXR_LATEST = "https://openexchangerates.org/api/latest.json"
 
 
 def get_oxr_api_key() -> str | None:
-    return keyring.get_password(OXR_KEYRING_SERVICE, OXR_KEYRING_USERNAME)
+    try:
+        return keyring.get_password(OXR_KEYRING_SERVICE, OXR_KEYRING_USERNAME)
+    except keyring.errors.KeyringError:
+        return None
 
 
 def set_oxr_api_key(key: str | None) -> None:
-    if key:
-        keyring.set_password(OXR_KEYRING_SERVICE, OXR_KEYRING_USERNAME, key)
-        return
     try:
+        if key:
+            keyring.set_password(OXR_KEYRING_SERVICE, OXR_KEYRING_USERNAME, key)
+            return
         keyring.delete_password(OXR_KEYRING_SERVICE, OXR_KEYRING_USERNAME)
-    except keyring.errors.PasswordDeleteError:
+    except keyring.errors.KeyringError:
         pass
 
 

@@ -20,16 +20,19 @@ TWELVEDATA_QUOTE_URL = "https://api.twelvedata.com/quote"
 
 
 def get_twelvedata_api_key() -> str | None:
-    return keyring.get_password(TWELVEDATA_KEYRING_SERVICE, TWELVEDATA_KEYRING_USERNAME)
+    try:
+        return keyring.get_password(TWELVEDATA_KEYRING_SERVICE, TWELVEDATA_KEYRING_USERNAME)
+    except keyring.errors.KeyringError:
+        return None
 
 
 def set_twelvedata_api_key(key: str | None) -> None:
-    if key:
-        keyring.set_password(TWELVEDATA_KEYRING_SERVICE, TWELVEDATA_KEYRING_USERNAME, key)
-        return
     try:
+        if key:
+            keyring.set_password(TWELVEDATA_KEYRING_SERVICE, TWELVEDATA_KEYRING_USERNAME, key)
+            return
         keyring.delete_password(TWELVEDATA_KEYRING_SERVICE, TWELVEDATA_KEYRING_USERNAME)
-    except keyring.errors.PasswordDeleteError:
+    except keyring.errors.KeyringError:
         pass
 
 
