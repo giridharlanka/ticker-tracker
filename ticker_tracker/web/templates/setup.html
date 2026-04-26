@@ -37,15 +37,36 @@
   {% endif %}
 
   <form method="post" action="/">
+    <h2>{{ titles.holdings_source }}</h2>
+    <div class="help">{{ helps.holdings_source }}</div>
+    <div class="row">
+      <input type="radio" name="holdings_source" id="src_google" value="google_sheets" {% if form.holdings_source == 'google_sheets' %}checked{% endif %}>
+      <label for="src_google">Google Sheets</label>
+    </div>
+    <div class="row">
+      <input type="radio" name="holdings_source" id="src_local" value="local_file" {% if form.holdings_source == 'local_file' %}checked{% endif %}>
+      <label for="src_local">Local file (CSV or XLSX)</label>
+    </div>
+
     <h2>{{ titles.google_sheets_id }}</h2>
     <div class="help">{{ helps.google_sheets_id }}</div>
     <label for="google_sheets_id">Sheet ID</label>
-    <input type="text" id="google_sheets_id" name="google_sheets_id" value="{{ form.google_sheets_id }}" autocomplete="off" required>
+    <input type="text" id="google_sheets_id" name="google_sheets_id" value="{{ form.google_sheets_id }}" autocomplete="off">
 
     <h2>{{ titles.holdings_sheet_name }}</h2>
     <div class="help">{{ helps.holdings_sheet_name }}</div>
     <label for="holdings_sheet_name">Tab name</label>
     <input type="text" id="holdings_sheet_name" name="holdings_sheet_name" value="{{ form.holdings_sheet_name }}" required>
+
+    <h2>{{ titles.local_holdings_path }}</h2>
+    <div class="help">{{ helps.local_holdings_path }}</div>
+    <label for="local_holdings_path">Path to local holdings file</label>
+    <input type="text" id="local_holdings_path" name="local_holdings_path" value="{{ form.local_holdings_path }}" autocomplete="off">
+
+    <h2>{{ titles.local_holdings_sheet_name }}</h2>
+    <div class="help">{{ helps.local_holdings_sheet_name }}</div>
+    <label for="local_holdings_sheet_name">Sheet/tab name (used for XLSX only)</label>
+    <input type="text" id="local_holdings_sheet_name" name="local_holdings_sheet_name" value="{{ form.local_holdings_sheet_name }}">
 
     <h2>{{ titles.column_mapping }}</h2>
     <div class="help">{{ helps.column_mapping }}</div>
@@ -57,7 +78,7 @@
     <h2>{{ titles.emails }}</h2>
     <div class="help">{{ helps.emails }}</div>
     <label for="emails">One email per line</label>
-    <textarea id="emails" name="emails" required>{{ form.emails }}</textarea>
+    <textarea id="emails" name="emails">{{ form.emails }}</textarea>
 
     <h2>{{ titles.finance_sources }}</h2>
     <div class="help">{{ helps.finance_sources }}</div>
@@ -67,7 +88,14 @@
       <label for="fin_{{ sid }}">{{ slabel }}</label>
     </div>
     {% if sid != 'yahoo' %}
-    <label for="key_{{ sid }}">API key for {{ sid }} (keychain)</label>
+    <label for="key_action_{{ sid }}">Key action for {{ sid }}</label>
+    <select id="key_action_{{ sid }}" name="key_action_{{ sid }}">
+      <option value="keep" {% if form.finance_key_action[sid] == 'keep' %}selected{% endif %}>Keep existing key</option>
+      <option value="replace" {% if form.finance_key_action[sid] == 'replace' %}selected{% endif %}>Replace with new key</option>
+      <option value="clear" {% if form.finance_key_action[sid] == 'clear' %}selected{% endif %}>Clear existing key</option>
+    </select>
+    <div class="muted">Current key status: {{ key_statuses[sid] }}</div>
+    <label for="key_{{ sid }}">New API key for {{ sid }} (only used when "Replace" selected)</label>
     <input type="password" name="key_{{ sid }}" id="key_{{ sid }}" value="{{ form['key_' ~ sid] }}" autocomplete="new-password">
     {% endif %}
     {% endfor %}
@@ -85,7 +113,14 @@
       <label for="fx_{{ fx_id }}">{{ fx_label }}</label>
     </div>
     {% endfor %}
-    <label for="fx_api_key">FX API key (only if you chose a paid source above)</label>
+    <label for="fx_key_action">FX key action</label>
+    <select id="fx_key_action" name="fx_key_action">
+      <option value="keep" {% if form.fx_key_action == 'keep' %}selected{% endif %}>Keep existing key</option>
+      <option value="replace" {% if form.fx_key_action == 'replace' %}selected{% endif %}>Replace with new key</option>
+      <option value="clear" {% if form.fx_key_action == 'clear' %}selected{% endif %}>Clear existing key</option>
+    </select>
+    <div class="muted">Current FX key status: {{ key_statuses['fx'] }}</div>
+    <label for="fx_api_key">New FX API key (only used when "Replace" selected)</label>
     <input type="password" name="fx_api_key" id="fx_api_key" value="{{ form.fx_api_key }}" autocomplete="new-password">
 
     <h2>{{ titles.market_overrides }}</h2>
@@ -99,6 +134,20 @@
       <input type="checkbox" name="upload_to_drive" id="upload_to_drive" value="1" {% if form.upload_to_drive %}checked{% endif %}>
       <label for="upload_to_drive">Upload the generated Excel file to Google Drive</label>
     </div>
+
+    <h2>{{ titles.output_formats }}</h2>
+    <div class="help">{{ helps.output_formats }}</div>
+    {% for fmt in output_formats %}
+    <div class="row">
+      <input type="checkbox" name="output_{{ fmt }}" id="output_{{ fmt }}" value="1" {% if fmt in form.output_formats %}checked{% endif %}>
+      <label for="output_{{ fmt }}">{{ fmt|upper }}</label>
+    </div>
+    {% endfor %}
+
+    <h2>{{ titles.local_report_dir }}</h2>
+    <div class="help">{{ helps.local_report_dir }}</div>
+    <label for="local_report_dir">Folder path (leave blank for system temp)</label>
+    <input type="text" id="local_report_dir" name="local_report_dir" value="{{ form.local_report_dir }}" autocomplete="off">
 
     <h2>{{ titles.run_on_startup }}</h2>
     <div class="help">{{ helps.run_on_startup }}</div>

@@ -16,6 +16,8 @@ credentials.json
 *.token
 config.enc
 .env
+service_account.json
+service-account.json
 
 # Coverage
 .coverage
@@ -25,3 +27,10 @@ htmlcov/
 # Other files
 exploration_prompt*
 Portfolio_Tracker_Implementation_Plan*
+.DS_Store
+*.mov
+*.mp4
+*.gif
+ticker_reports/
+.tools/
+.cache/

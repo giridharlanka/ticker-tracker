@@ -126,11 +126,16 @@ class AppConfig:
     fx_source: str = "frankfurter"
     base_currency: str = "USD"
     run_on_startup: bool = False
+    holdings_source: str = "google_sheets"
     google_sheets_id: str = ""
     holdings_sheet_name: str = "Holdings"
+    local_holdings_path: str = ""
+    local_holdings_sheet_name: str = "Holdings"
     column_map: dict[str, str] = field(default_factory=dict)
     market_currency_overrides: dict[str, str] = field(default_factory=dict)
     upload_to_drive: bool = False
+    output_formats: list[str] = field(default_factory=lambda: ["xlsx"])
+    local_report_dir: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -146,11 +151,16 @@ class AppConfig:
             fx_source=str(data.get("fx_source") or "frankfurter"),
             base_currency=str(data.get("base_currency") or "USD"),
             run_on_startup=bool(data.get("run_on_startup", False)),
+            holdings_source=str(data.get("holdings_source") or "google_sheets"),
             google_sheets_id=str(data.get("google_sheets_id") or ""),
             holdings_sheet_name=str(data.get("holdings_sheet_name") or "Holdings"),
+            local_holdings_path=str(data.get("local_holdings_path") or ""),
+            local_holdings_sheet_name=str(data.get("local_holdings_sheet_name") or "Holdings"),
             column_map=dict(data.get("column_map") or {}),
             market_currency_overrides=dict(data.get("market_currency_overrides") or {}),
             upload_to_drive=bool(data.get("upload_to_drive", False)),
+            output_formats=list(data.get("output_formats") or ["xlsx"]),
+            local_report_dir=str(data.get("local_report_dir") or ""),
         )
 
 

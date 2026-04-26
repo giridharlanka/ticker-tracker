@@ -339,6 +339,53 @@ def test_run_once_deduplicates_recipients(
     assert "Holdings" in body
 
 
+@patch("ticker_tracker.engine.send_email")
+@patch("ticker_tracker.engine.upload_file")
+@patch("ticker_tracker.engine.read_holdings")
+@patch("ticker_tracker.engine.read_local_holdings")
+@patch("ticker_tracker.engine.get_prices_with_fallback")
+@patch("ticker_tracker.fx.frankfurter.urllib.request.urlopen")
+def test_run_once_local_source_skips_google_features(
+    mock_urlopen: MagicMock,
+    mock_prices: MagicMock,
+    mock_read_local: MagicMock,
+    mock_read_sheets: MagicMock,
+    mock_upload: MagicMock,
+    mock_send_email: MagicMock,
+    tmp_path: Path,
+) -> None:
+    import json
+
+    cfg = _minimal_config(tmp_path)
+    cfg.holdings_source = "local_file"
+    cfg.local_holdings_path = str(tmp_path / "h.csv")
+    cfg.output_formats = ["html"]
+    cfg.upload_to_drive = True
+    cfg.email_ids = ["a@example.com"]
+    mock_read_local.return_value = [{"ticker": "VOO", "shares": "1", "cost_basis": "500"}]
+    mock_prices.return_value = {"VOO": PriceResult(400.0, "USD", 400.0, "yahoo")}
+
+    class _Resp:
+        def read(self) -> bytes:
+            return json.dumps(
+                {"amount": 1.0, "base": "SGD", "date": "2026-01-10", "rates": {"USD": 1.0}}
+            ).encode()
+
+        def __enter__(self) -> _Resp:
+            return self
+
+        def __exit__(self, *a: object) -> bool:
+            return False
+
+    mock_urlopen.return_value = _Resp()
+    out = run_once(app_config=cfg, send_email_notifications=True)
+    assert out["workbook_path"] is None
+    assert out["html_report_path"]
+    mock_read_sheets.assert_not_called()
+    mock_upload.assert_not_called()
+    mock_send_email.assert_not_called()
+
+
 def test_build_portfolio_email_html_highlights_tables() -> None:
     summary = {
         "total_cost_basis_base": 200.0,

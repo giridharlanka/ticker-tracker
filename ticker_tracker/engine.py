@@ -5,7 +5,6 @@ from __future__ import annotations
 import html
 import logging
 import re
-import tempfile
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,7 +36,9 @@ from ticker_tracker.fx.registry import FXRunRegistry
 from ticker_tracker.google.drive import upload_file
 from ticker_tracker.google.gmail import send_email
 from ticker_tracker.google.sheets import read_holdings
+from ticker_tracker.local_holdings import read_local_holdings
 from ticker_tracker.report_builder import build_portfolio_workbook, default_workbook_filename
+from ticker_tracker.setup_core import resolve_local_report_dir
 
 logger = logging.getLogger(__name__)
 
@@ -467,6 +468,23 @@ def build_portfolio_email_html(
     return "".join(parts)
 
 
+def build_portfolio_html_report(
+    *,
+    base: str,
+    summary: Mapping[str, Any],
+    holdings: list[dict[str, Any]],
+    drive_url: str | None,
+) -> str:
+    """Standalone HTML report for local viewing."""
+    body = build_portfolio_email_html(
+        base=base,
+        summary=summary,
+        holdings=holdings,
+        drive_url=drive_url,
+    )
+    return body
+
+
 def run_once(
     *,
     app_config: AppConfig | None = None,
@@ -489,8 +507,8 @@ def run_once(
     (e.g. CLI progress bar). *status_callback* is still invoked with the same *message* text.
     """
     cfg = app_config if app_config is not None else (encrypted_config or EncryptedConfig()).load()
-    if not cfg.google_sheets_id or not cfg.column_map:
-        raise ValueError("Config is missing google_sheets_id or column_map.")
+    if not cfg.column_map:
+        raise ValueError("Config is missing column_map.")
 
     def _status(msg: str) -> None:
         if status_callback:
@@ -503,15 +521,27 @@ def run_once(
 
     creds = credentials
     use_drive = cfg.upload_to_drive if upload_to_drive is None else upload_to_drive
+    if cfg.holdings_source == "local_file":
+        use_drive = False
+        send_email_notifications = False
 
     _progress(5, "Starting portfolio run…")
-    _progress(10, "Reading holdings from Google Sheets…")
-    rows_raw = read_holdings(
-        cfg.google_sheets_id,
-        cfg.holdings_sheet_name,
-        cfg.column_map,
-        credentials=creds,
-    )
+    _progress(10, "Reading holdings…")
+    if cfg.holdings_source == "local_file":
+        rows_raw = read_local_holdings(
+            cfg.local_holdings_path,
+            column_map=cfg.column_map,
+            sheet_name=cfg.local_holdings_sheet_name,
+        )
+    else:
+        if not cfg.google_sheets_id:
+            raise ValueError("Config is missing google_sheets_id for google_sheets source.")
+        rows_raw = read_holdings(
+            cfg.google_sheets_id,
+            cfg.holdings_sheet_name,
+            cfg.column_map,
+            credentials=creds,
+        )
     _progress(18, f"Loaded {len(rows_raw)} sheet row(s).")
 
     def _sheet_ticker(r: dict[str, Any]) -> str:
@@ -711,26 +741,46 @@ def run_once(
         "cost_fx_unavailable_tickers": sorted(set(cost_fx_unavailable)),
     }
 
-    if workbook_path is not None:
-        out_path = Path(workbook_path)
-        fname = out_path.name
-    else:
-        fname = default_workbook_filename()
-        out_path = Path(tempfile.gettempdir()) / fname
-    _progress(72, "Building Excel report…")
-    build_portfolio_workbook(
-        out_path,
-        base_currency=base,
-        holdings_rows=enriched,
-        summary=summary,
-        metadata=metadata,
-    )
-    _progress(80, "Report file ready.")
+    output_formats = list(dict.fromkeys(cfg.output_formats or ["xlsx"]))
+    workbook_out_path: Path | None = None
+    html_out_path: Path | None = None
+    fname = default_workbook_filename()
+    output_dir = resolve_local_report_dir(cfg.local_report_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if "xlsx" in output_formats:
+        if workbook_path is not None:
+            workbook_out_path = Path(workbook_path)
+            fname = workbook_out_path.name
+        else:
+            workbook_out_path = output_dir / fname
+        _progress(72, "Building Excel report…")
+        build_portfolio_workbook(
+            workbook_out_path,
+            base_currency=base,
+            holdings_rows=enriched,
+            summary=summary,
+            metadata=metadata,
+        )
+    if "html" in output_formats:
+        base_name = Path(fname).stem
+        html_out_path = output_dir / f"{base_name}.html"
+        html_out_path.write_text(
+            build_portfolio_html_report(
+                base=base,
+                summary=summary,
+                holdings=enriched,
+                drive_url=None,
+            ),
+            encoding="utf-8",
+        )
+    _progress(80, "Report file(s) ready.")
 
     drive_url: str | None = None
     if use_drive:
+        if workbook_out_path is None:
+            raise ValueError("Drive upload requires xlsx output.")
         _progress(84, "Uploading to Google Drive…")
-        drive_url = upload_file(out_path, fname, folder_id=None, credentials=creds)
+        drive_url = upload_file(workbook_out_path, fname, folder_id=None, credentials=creds)
         _progress(90, "Drive upload complete.")
 
     emails_sent = 0
@@ -756,7 +806,13 @@ def run_once(
 
         _progress(92, "Sending notification email(s)…")
         for addr in recipients:
-            send_email(addr, subject, body, attachment_path=out_path, credentials=creds)
+            send_email(
+                addr,
+                subject,
+                body,
+                attachment_path=workbook_out_path,
+                credentials=creds,
+            )
             emails_sent += 1
 
     if drive_url:
@@ -768,8 +824,9 @@ def run_once(
         "config": cfg,
         "summary": summary,
         "holdings": enriched,
-        "workbook_path": str(out_path),
-        "workbook_filename": fname,
+        "workbook_path": str(workbook_out_path) if workbook_out_path else None,
+        "workbook_filename": fname if workbook_out_path else None,
+        "html_report_path": str(html_out_path) if html_out_path else None,
         "drive_url": drive_url,
         "emails_sent": emails_sent,
         "metadata": metadata,

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 # Short titles for CLI section headers
 TITLES = {
+    "holdings_source": "Holdings input source",
     "google_sheets_id": "Google Sheets ID",
     "holdings_sheet_name": "Holdings sheet (tab) name",
+    "local_holdings_path": "Local holdings file path",
+    "local_holdings_sheet_name": "Local XLSX sheet (tab) name",
     "column_mapping": "Column mapping",
     "emails": "Email addresses",
     "finance_sources": "Price data sources",
@@ -13,10 +16,17 @@ TITLES = {
     "fx_source": "FX (exchange rate) source",
     "market_overrides": "Custom market suffix → currency",
     "upload_to_drive": "Upload report to Google Drive",
+    "output_formats": "Report output formats",
+    "local_report_dir": "Local report output folder",
     "run_on_startup": "Run on startup",
 }
 
 HELPS: dict[str, str] = {
+    "holdings_source": """
+Choose where holdings are loaded from:
+• google_sheets — reads from Google Sheets API.
+• local_file — reads from a local CSV or XLSX file.
+""",
     "google_sheets_id": """
 Open your portfolio spreadsheet in Google Sheets in a web browser.
 Look at the address bar. The Sheet ID is the long random-looking string
@@ -27,6 +37,15 @@ Example URL:
                                       └──────────── copy this part ────────────┘
 
 Paste only that ID here (letters, numbers, hyphens, underscores—no spaces).
+""",
+    "local_holdings_path": """
+Path to your local holdings file. CSV and XLSX are supported.
+Absolute paths are accepted directly. Relative paths are resolved from the
+current working directory where you run ticker-tracker.
+""",
+    "local_holdings_sheet_name": """
+For XLSX input only: the worksheet tab name containing your holdings rows.
+Ignored for CSV files.
 """,
     "holdings_sheet_name": """
 This is the tab name at the bottom of the spreadsheet where your holdings
@@ -88,8 +107,20 @@ The suffix should start with a dot. Use a valid ISO currency code after "=".
     "upload_to_drive": """
 If enabled, each successful run uploads the generated Excel workbook to your
 Google Drive (using the same Google account as OAuth). If disabled, the file
-is only created locally and attached to the notification email (when email
-is configured).
+is only created locally and can still be emailed when Gmail is configured.
+""",
+    "output_formats": """
+Choose at least one report format:
+• xlsx — Excel workbook output.
+• html — standalone local HTML report for quick viewing in a browser.
+""",
+    "local_report_dir": """
+Folder where XLSX and HTML reports are written on each run.
+Leave blank to use the system temporary directory (same as before).
+
+Absolute paths work as-is. Relative paths are resolved from the current
+working directory when you run ticker-tracker (for scheduled runs, prefer
+an absolute path).
 """,
     "run_on_startup": """
 If enabled, the app can register itself to launch when you log in to your

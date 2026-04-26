@@ -7,13 +7,21 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from ticker_tracker.config import AppConfig, EncryptedConfig, default_config_path
+from ticker_tracker.config import (
+    AppConfig,
+    EncryptedConfig,
+    default_config_path,
+    get_finance_api_key,
+    get_fx_api_key,
+)
 from ticker_tracker.currency import normalize_iso4217
 from ticker_tracker.setup_core import (
     DEFAULT_COLUMN_LETTERS,
     FREE_FX_SOURCES,
     FX_SOURCES,
+    HOLDINGS_SOURCES,
     KNOWN_FINANCE_SOURCES,
+    OUTPUT_FORMATS,
     OPTIONAL_COLUMN_FIELDS,
     RECOMMENDED_COLUMNS,
     apply_setup,
@@ -97,7 +105,19 @@ def _collect_finance() -> tuple[list[str], dict[str, str]]:
     for name in names:
         if name == "yahoo":
             continue
-        keys[name] = input(f"  API key for '{name}' (stored in OS keychain): ").strip()
+        existing = bool(get_finance_api_key(name))
+        print(
+            f"  API key status for '{name}': "
+            f"{'exists (hidden)' if existing else 'not set'}"
+        )
+        action = _prompt(
+            "  Key action: [k]eep existing, [r]eplace with new key, [c]lear existing",
+            "k",
+        ).strip().lower()
+        if action == "c":
+            keys[name] = ""
+        elif action == "r":
+            keys[name] = input(f"  New API key for '{name}': ").strip()
     return names, keys
 
 
@@ -114,8 +134,48 @@ def _collect_fx_source() -> tuple[str, str | None]:
         return choice, None
     if choice in FREE_FX_SOURCES:
         return choice, None
-    key = input("  FX API key (stored in OS keychain): ").strip()
-    return choice, (key or None)
+    existing = bool(get_fx_api_key())
+    print(f"  FX key status: {'exists (hidden)' if existing else 'not set'}")
+    action = _prompt(
+        "  Key action: [k]eep existing, [r]eplace with new key, [c]lear existing",
+        "k",
+    ).strip().lower()
+    if action == "c":
+        return choice, ""
+    if action == "r":
+        key = input("  New FX API key: ").strip()
+        return choice, (key or None)
+    return choice, None
+
+
+def _collect_holdings_source() -> str:
+    print_section("holdings_source")
+    print(f"Options: {', '.join(HOLDINGS_SOURCES)}")
+    return _prompt("Holdings source", "google_sheets").strip().lower()
+
+
+def _collect_local_holdings() -> tuple[str, str]:
+    print_section("local_holdings_path")
+    path = _prompt("Local holdings file path (.csv or .xlsx)")
+    print_section("local_holdings_sheet_name")
+    sheet_name = _prompt("Sheet tab name for .xlsx files", "Holdings")
+    return path, sheet_name
+
+
+def _collect_output_formats() -> list[str]:
+    print_section("output_formats")
+    print(f"Options: {', '.join(OUTPUT_FORMATS)}")
+    raw = _prompt("Output formats (comma-separated)", "xlsx")
+    chosen = [p.strip().lower() for p in raw.split(",") if p.strip()]
+    return chosen or ["xlsx"]
+
+
+def _collect_local_report_dir() -> str:
+    print_section("local_report_dir")
+    return _prompt(
+        "Local folder for XLSX/HTML reports (empty = system temp folder)",
+        "",
+    ).strip()
 
 
 def _collect_market_overrides() -> dict[str, str]:
@@ -138,11 +198,18 @@ def _collect_market_overrides() -> dict[str, str]:
 def run_wizard(save_path: Callable[[], EncryptedConfig] | None = None) -> AppConfig:
     print("Ticker Tracker — setup wizard (terminal)\n")
 
-    print_section("google_sheets_id")
-    sheet_id = _prompt("Google Sheets ID")
-
-    print_section("holdings_sheet_name")
-    sheet_name = _prompt("Holdings sheet (tab) name", "Holdings")
+    holdings_source = _collect_holdings_source()
+    sheet_id = ""
+    sheet_name = "Holdings"
+    local_path = ""
+    local_sheet_name = "Holdings"
+    if holdings_source == "google_sheets":
+        print_section("google_sheets_id")
+        sheet_id = _prompt("Google Sheets ID")
+        print_section("holdings_sheet_name")
+        sheet_name = _prompt("Holdings sheet (tab) name", "Holdings")
+    else:
+        local_path, local_sheet_name = _collect_local_holdings()
 
     column_map = _collect_column_map()
     emails = _collect_emails()
@@ -163,11 +230,16 @@ def run_wizard(save_path: Callable[[], EncryptedConfig] | None = None) -> AppCon
 
     print_section("run_on_startup")
     run_startup = _prompt_yes_no("Run on OS startup", default=False)
+    output_formats = _collect_output_formats()
+    local_report_dir = _collect_local_report_dir()
 
     enc = save_path() if save_path else EncryptedConfig()
     cfg, issues = apply_setup(
+        holdings_source=holdings_source,
         google_sheets_id=sheet_id.strip(),
         holdings_sheet_name=sheet_name.strip() or "Holdings",
+        local_holdings_path=local_path.strip(),
+        local_holdings_sheet_name=local_sheet_name.strip() or "Holdings",
         column_map=column_map,
         email_ids=emails,
         finance_sources=sources,
@@ -178,6 +250,8 @@ def run_wizard(save_path: Callable[[], EncryptedConfig] | None = None) -> AppCon
         market_currency_overrides=overrides,
         run_on_startup=run_startup,
         upload_to_drive=upload_drive,
+        output_formats=output_formats,
+        local_report_dir=local_report_dir,
         encrypted_config=enc,
     )
     if issues:

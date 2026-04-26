@@ -60,6 +60,12 @@ ticker-tracker-setup
 
 **Email notifications:** every address you save in setup is sent the report on each successful run (the GUI shows the full list; it no longer limits sends to a single “profile”).
 
+**Output files:** choose one or both formats in setup:
+- `xlsx` (Excel workbook)
+- `html` (standalone local HTML report)
+
+Reports are written to your configured `local_report_dir`; if blank, the app uses your OS temp directory.
+
 **Review saved settings** (read-only; same fields as `config.enc`, not keychain secrets):
 
 ```bash
@@ -96,6 +102,29 @@ Row **1** is treated as a **header** (ignored for data). Data starts at row **2*
 | D05    | SGX      | 2000   | 9.25       | SGD               |                     |
 | 0005   | HKEX     | 400    | 800        | HKD               |                     |
 | SHEL   | LSE      | 150    | 15         | GBP               |                     |
+
+---
+
+## Local holdings file format (CSV/XLSX)
+
+You can set `holdings_source` to **`local_file`** in setup and point the app to:
+- a **CSV** file (column mapping uses header names), or
+- an **XLSX** file (column mapping uses column letters like `A`, `B`, `C`).
+
+Required mapped fields:
+- `ticker`
+- `shares`
+- `cost_basis`
+
+Optional mapped fields:
+- `exchange`
+- `purchase_currency`
+- `currency_override`
+
+Notes:
+- For XLSX, the sheet/tab name defaults to `Holdings` (configurable).
+- Local-file runs are intentionally local-only: **Google Drive upload and Gmail sends are disabled** for that run.
+- Relative local paths are resolved from the current working directory.
 
 **Example mixed portfolio (listing currencies):**
 

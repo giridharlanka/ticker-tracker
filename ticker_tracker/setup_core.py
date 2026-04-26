@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from ticker_tracker.config import (
     AppConfig,
     EncryptedConfig,
+    get_finance_api_key,
+    get_fx_api_key,
     set_finance_api_key,
     set_fx_api_key,
 )
@@ -25,6 +30,9 @@ KNOWN_FINANCE_SOURCES = (
     "finnhub",
     "polygon",
 )
+
+HOLDINGS_SOURCES = ("google_sheets", "local_file")
+OUTPUT_FORMATS = ("xlsx", "html")
 
 FX_SOURCES = (
     "frankfurter",
@@ -70,10 +78,60 @@ def _validate_google_sheet_id(sheet_id: str) -> list[str]:
     return errors
 
 
+def _validate_holdings_source(source: str) -> list[str]:
+    if source not in HOLDINGS_SOURCES:
+        return [f"Unknown holdings source {source!r}. Choose one of: {', '.join(HOLDINGS_SOURCES)}."]
+    return []
+
+
+def _validate_local_holdings_path(path: str) -> list[str]:
+    if not path.strip():
+        return ["Local holdings path is required when source is local_file."]
+    return []
+
+
+def _validate_output_formats(formats: list[str]) -> list[str]:
+    if not formats:
+        return ["Choose at least one output format (xlsx and/or html)."]
+    bad = sorted({f for f in formats if f not in OUTPUT_FORMATS})
+    if bad:
+        return [f"Unsupported output format(s): {', '.join(bad)}."]
+    return []
+
+
+def resolve_local_report_dir(raw: str | None) -> Path:
+    """Directory for XLSX/HTML reports. Blank uses the OS temp directory."""
+    s = (raw or "").strip()
+    if not s:
+        return Path(tempfile.gettempdir())
+    p = Path(s).expanduser()
+    if not p.is_absolute():
+        p = (Path.cwd() / p).resolve()
+    else:
+        p = p.resolve()
+    return p
+
+
+def _validate_local_report_dir(raw: str) -> list[str]:
+    if not (raw or "").strip():
+        return []
+    p = resolve_local_report_dir(raw)
+    if p.exists():
+        if not p.is_dir():
+            return [f"local_report_dir must be a directory: {p}"]
+        if not os.access(p, os.W_OK):
+            return [f"local_report_dir is not writable: {p}"]
+        return []
+    parent = p.parent
+    if not parent.exists() or not parent.is_dir():
+        return [f"local_report_dir parent does not exist: {parent}"]
+    if not os.access(parent, os.W_OK):
+        return [f"Cannot create local_report_dir (parent not writable): {parent}"]
+    return []
+
+
 def _validate_emails(emails: list[str]) -> list[str]:
     bad = [e for e in emails if not EMAIL_RE.fullmatch(e)]
-    if not emails:
-        return ["At least one email is required."]
     if bad:
         return [f"Invalid email format: {', '.join(bad)}"]
     return []
@@ -134,7 +192,11 @@ def verify_setup(
 ) -> list[str]:
     """Return human-readable issues; empty means OK."""
     issues: list[str] = []
-    issues.extend(_validate_google_sheet_id(config.google_sheets_id))
+    issues.extend(_validate_holdings_source(config.holdings_source))
+    if config.holdings_source == "google_sheets":
+        issues.extend(_validate_google_sheet_id(config.google_sheets_id))
+    else:
+        issues.extend(_validate_local_holdings_path(config.local_holdings_path))
     issues.extend(_validate_column_map(config.column_map))
     issues.extend(_validate_emails(config.email_ids))
     issues.extend(_validate_finance(config.finance_sources, finance_api_keys))
@@ -142,6 +204,10 @@ def verify_setup(
     issues.extend(_validate_fx_source(config.fx_source))
     issues.extend(_validate_fx_api_key(config.fx_source, fx_api_key))
     issues.extend(_validate_market_overrides(config.market_currency_overrides))
+    issues.extend(_validate_output_formats(config.output_formats))
+    if config.holdings_source == "local_file" and config.upload_to_drive:
+        issues.append("Google Drive upload is unavailable when holdings_source is local_file.")
+    issues.extend(_validate_local_report_dir(config.local_report_dir))
     issues.extend(_remote_verify_finance_keys(config))
     return issues
 
@@ -165,26 +231,42 @@ def persist_api_keys(
     for src in finance_sources:
         if src == "yahoo":
             continue
-        key = finance_api_keys.get(src)
-        set_finance_api_key(src, key)
+        if src in finance_api_keys:
+            key = finance_api_keys.get(src)
+            set_finance_api_key(src, key)
+        else:
+            key = get_finance_api_key(src)
         if src == "twelve_data" and key:
             set_twelvedata_api_key(key)
 
     if fx_source in FREE_FX_SOURCES:
         set_fx_api_key(None)
     else:
-        set_fx_api_key(fx_api_key)
+        if fx_api_key is not None:
+            set_fx_api_key(fx_api_key)
 
-    if fx_source == "open_exchange_rates" and fx_api_key:
-        set_oxr_api_key(fx_api_key)
+    if fx_source == "open_exchange_rates":
+        if fx_api_key is None:
+            existing = get_fx_api_key()
+            if existing:
+                set_oxr_api_key(existing)
+            else:
+                clear_oxr_api_key()
+        elif fx_api_key:
+            set_oxr_api_key(fx_api_key)
+        else:
+            clear_oxr_api_key()
     else:
         clear_oxr_api_key()
 
 
 def apply_setup(
     *,
+    holdings_source: str,
     google_sheets_id: str,
     holdings_sheet_name: str,
+    local_holdings_path: str,
+    local_holdings_sheet_name: str,
     column_map: dict[str, str],
     email_ids: list[str],
     finance_sources: list[str],
@@ -195,6 +277,8 @@ def apply_setup(
     market_currency_overrides: dict[str, str],
     run_on_startup: bool,
     upload_to_drive: bool,
+    output_formats: list[str],
+    local_report_dir: str,
     encrypted_config: EncryptedConfig,
 ) -> tuple[AppConfig | None, list[str]]:
     """
@@ -203,8 +287,11 @@ def apply_setup(
     Returns ``(config, [])`` on success, or ``(None, issues)`` on validation failure.
     """
     cfg = AppConfig(
+        holdings_source=holdings_source.strip().lower(),
         google_sheets_id=google_sheets_id.strip(),
         holdings_sheet_name=(holdings_sheet_name.strip() or "Holdings"),
+        local_holdings_path=local_holdings_path.strip(),
+        local_holdings_sheet_name=(local_holdings_sheet_name.strip() or "Holdings"),
         column_map=column_map,
         email_ids=email_ids,
         finance_sources=finance_sources,
@@ -213,14 +300,30 @@ def apply_setup(
         market_currency_overrides=market_currency_overrides,
         run_on_startup=run_on_startup,
         upload_to_drive=upload_to_drive,
+        output_formats=list(dict.fromkeys(output_formats)),
+        local_report_dir=local_report_dir.strip(),
     )
+    effective_finance_keys = dict(finance_api_keys)
+    for src in finance_sources:
+        if src == "yahoo":
+            continue
+        if src not in effective_finance_keys:
+            existing = get_finance_api_key(src)
+            if existing:
+                effective_finance_keys[src] = existing
+    effective_fx_key = fx_api_key
+    if fx_api_key is None and cfg.fx_source not in FREE_FX_SOURCES:
+        effective_fx_key = get_fx_api_key()
+
     issues = verify_setup(
         cfg,
-        finance_api_keys=finance_api_keys,
-        fx_api_key=fx_api_key,
+        finance_api_keys=effective_finance_keys,
+        fx_api_key=effective_fx_key,
     )
     if issues:
         return None, issues
+
+    resolve_local_report_dir(cfg.local_report_dir).mkdir(parents=True, exist_ok=True)
 
     encrypted_config.save(cfg)
     persist_api_keys(finance_sources, finance_api_keys, cfg.fx_source, fx_api_key)
