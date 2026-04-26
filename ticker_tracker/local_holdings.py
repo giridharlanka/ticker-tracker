@@ -57,7 +57,9 @@ def _read_csv(path: Path, column_map: dict[str, str]) -> list[dict[str, Any]]:
             if src_header not in normalized_src:
                 raise KeyError(f"CSV header {src_header!r} not found in file.")
         for src_row in reader:
-            row_raw = {field: src_row.get(normalized_src[header_map[field]], "") for field in fields}
+            row_raw = {
+                field: src_row.get(normalized_src[header_map[field]], "") for field in fields
+            }
             row = _normalized_entry(row_raw, fields)
             if row:
                 out.append(row)

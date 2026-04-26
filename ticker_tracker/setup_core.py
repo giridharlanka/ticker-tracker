@@ -80,7 +80,8 @@ def _validate_google_sheet_id(sheet_id: str) -> list[str]:
 
 def _validate_holdings_source(source: str) -> list[str]:
     if source not in HOLDINGS_SOURCES:
-        return [f"Unknown holdings source {source!r}. Choose one of: {', '.join(HOLDINGS_SOURCES)}."]
+        choices = ", ".join(HOLDINGS_SOURCES)
+        return [f"Unknown holdings source {source!r}. Choose one of: {choices}."]
     return []
 
 

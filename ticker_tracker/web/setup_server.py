@@ -8,8 +8,12 @@ from typing import Any
 
 from flask import Flask, render_template, request
 
-from ticker_tracker.config import EncryptedConfig, default_config_path
-from ticker_tracker.config import get_finance_api_key, get_fx_api_key
+from ticker_tracker.config import (
+    EncryptedConfig,
+    default_config_path,
+    get_finance_api_key,
+    get_fx_api_key,
+)
 from ticker_tracker.setup_core import (
     DEFAULT_COLUMN_LETTERS,
     HOLDINGS_SOURCES,

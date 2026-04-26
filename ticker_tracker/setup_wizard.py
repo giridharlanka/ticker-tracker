@@ -21,8 +21,8 @@ from ticker_tracker.setup_core import (
     FX_SOURCES,
     HOLDINGS_SOURCES,
     KNOWN_FINANCE_SOURCES,
-    OUTPUT_FORMATS,
     OPTIONAL_COLUMN_FIELDS,
+    OUTPUT_FORMATS,
     RECOMMENDED_COLUMNS,
     apply_setup,
 )

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from openpyxl import Workbook
-
 from ticker_tracker.local_holdings import read_local_holdings
 
 
